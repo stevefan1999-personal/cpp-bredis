@@ -5,7 +5,8 @@
 // Distributed under the MIT Software License
 
 // this is an example how to use bredis in multi-threaded environment, i.e
-// the access to sockets and buffers should be routed via asio::io_context::strand
+// the access to sockets and buffers should be routed via
+// asio::io_context::strand
 //
 // sample output:
 //
@@ -22,10 +23,9 @@
 // pings: 346666, pongs: 346666
 // pings: 385500, pongs: 385500
 
-
-#include <boost/thread.hpp>
 #include <boost/algorithm/string.hpp>
 #include <boost/program_options.hpp>
+#include <boost/thread.hpp>
 #include <boost/tokenizer.hpp>
 
 #include <bredis.hpp>
@@ -39,7 +39,7 @@ namespace sys = boost::system;
 
 using socket_t = asio::ip::tcp::socket;
 using next_layer_t = socket_t;
-//using next_layer_t = r::test::SocketWithLogging<asio::ip::tcp::socket>;
+// using next_layer_t = r::test::SocketWithLogging<asio::ip::tcp::socket>;
 using Buffer = boost::asio::streambuf;
 using Iterator = typename r::to_iterator<Buffer>::iterator_t;
 using Policy = r::parsing_policy::keep_result;
@@ -50,80 +50,79 @@ struct redis_accessor_t {
     Buffer tx_buff;
     Buffer rx_buff;
     Connection conn;
-    asio::io_context& io;
+    asio::io_context &io;
     asio::io_context::strand strand;
     std::uint64_t ping_count;
     std::uint64_t pong_count;
-    redis_accessor_t(socket_t&& s, asio::io_context& context): conn{std::move(s)}, io(context), strand(context), ping_count{0}, pong_count{0}{}
+    redis_accessor_t(socket_t &&s, asio::io_context &context)
+        : conn{std::move(s)}, io(context),
+          strand(context), ping_count{0}, pong_count{0} {}
 };
 
 struct producer_t {
-    redis_accessor_t& redis;
-    producer_t(redis_accessor_t& redis_):redis(redis_) {
-        produce();
-    }
-    void produce(){
+    redis_accessor_t &redis;
+    producer_t(redis_accessor_t &redis_) : redis(redis_) { produce(); }
+    void produce() {
         r::single_command_t cmd_ping{"PING"};
         redis.conn.async_write(
-            redis.tx_buff,
-            cmd_ping,
-            asio::bind_executor(redis.strand, [this](const sys::error_code &ec, std::size_t bytes_transferred){
-                if (!ec){
-                    auto self = this;
-                    self->redis.ping_count++;
-                    self->redis.tx_buff.consume(bytes_transferred);
-                    self->produce();
-                }
-            })
-        );
+            redis.tx_buff, cmd_ping,
+            asio::bind_executor(
+                redis.strand, [this](const sys::error_code &ec,
+                                     std::size_t bytes_transferred) {
+                    if (!ec) {
+                        auto self = this;
+                        self->redis.ping_count++;
+                        self->redis.tx_buff.consume(bytes_transferred);
+                        self->produce();
+                    }
+                }));
     }
 };
 
 struct consumer_t {
-    redis_accessor_t& redis;
-    consumer_t(redis_accessor_t& redis_):redis(redis_) {
-        consume();
-    }
-    void consume(){
+    redis_accessor_t &redis;
+    consumer_t(redis_accessor_t &redis_) : redis(redis_) { consume(); }
+    void consume() {
         redis.conn.async_read(
             redis.rx_buff,
-            asio::bind_executor(redis.strand, [this](const sys::error_code &ec, result_t &&r){
-                if(!ec){
-                    auto self = this;
-                    self->redis.pong_count++;
-                    self->redis.rx_buff.consume(r.consumed);
-                    self->consume();
-                }
-            })
-        );
+            asio::bind_executor(
+                redis.strand, [this](const sys::error_code &ec, result_t &&r) {
+                    if (!ec) {
+                        auto self = this;
+                        self->redis.pong_count++;
+                        self->redis.rx_buff.consume(r.consumed);
+                        self->consume();
+                    }
+                }));
     }
 };
 
 struct watcher_t {
-    redis_accessor_t& redis;
+    redis_accessor_t &redis;
     asio::steady_timer timer;
-    watcher_t(redis_accessor_t& redis_):redis(redis_), timer(redis_.io, asio::chrono::seconds(1)){
+    watcher_t(redis_accessor_t &redis_)
+        : redis(redis_), timer(redis_.io, asio::chrono::seconds(1)) {
         watch();
     }
     void watch() {
         timer.expires_after(asio::chrono::seconds(1));
-        timer.async_wait(
-            asio::bind_executor(redis.strand, [this](const sys::error_code &ec){
+        timer.async_wait(asio::bind_executor(
+            redis.strand, [this](const sys::error_code &ec) {
                 if (!ec) {
                     auto self = this;
-                    std::cout << "pings: " << self->redis.ping_count << ", pongs: " << self->redis.pong_count << "\n";
+                    std::cout << "pings: " << self->redis.ping_count
+                              << ", pongs: " << self->redis.pong_count << "\n";
                     self->watch();
                 }
-            })
-        );
+            }));
     }
 };
 
 int main(int argc, char **argv) {
     po::options_description description("Allowed options");
-    description.add_options()("help", "show this help message")
-            ("host", po::value<std::string>(), "redis host (default 127.0.0.1)")
-            ("port", po::value<std::uint16_t>(), "redis port (default 6379)");
+    description.add_options()("help", "show this help message")(
+        "host", po::value<std::string>(), "redis host (default 127.0.0.1)")(
+        "port", po::value<std::uint16_t>(), "redis port (default 6379)");
     po::variables_map vm;
     po::store(po::parse_command_line(argc, argv, description), vm);
     po::notify(vm);
@@ -134,11 +133,12 @@ int main(int argc, char **argv) {
         return 1;
     }
 
-    std::string host = vm.count("host") ? vm["host"].as<std::string>() : "127.0.0.1";
+    std::string host =
+        vm.count("host") ? vm["host"].as<std::string>() : "127.0.0.1";
     uint16_t port = vm.count("host") ? vm["port"].as<std::uint16_t>() : 6379;
 
     asio::io_context io;
-    //asio::io_service io_service;
+    // asio::io_service io_service;
     auto ip_address = asio::ip::address::from_string(host);
     std::cout << "connecting to " << host << ":" << port << "\n";
     asio::ip::tcp::endpoint end_point(ip_address, port);
@@ -153,11 +153,14 @@ int main(int argc, char **argv) {
     watcher_t watcher(redis_accessor);
 
     // launch!
-    auto workers_count = boost::thread::physical_concurrency() * 2;
-    boost::thread_group pool;
-    for(size_t i = 0; i < workers_count; i++) {
-        pool.create_thread([&io] { io.run(); });
+    auto workers_count = std::thread::hardware_concurrency() * 2;
+
+    std::vector<std::thread> pool;
+    for (size_t i = 0; i < workers_count; i++) {
+        pool.push_back(std::thread{[&io] { io.run(); }});
     }
     io.run();
-    pool.join_all();
+    for (auto &thread : pool)
+        if (thread.joinable())
+            thread.join();
 }

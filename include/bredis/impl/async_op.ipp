@@ -196,9 +196,8 @@ class async_read_op {
 
 template <typename NextLayer, typename DynamicBuffer, typename ReadCallback,
           typename Policy>
-void async_read_op<NextLayer, DynamicBuffer, ReadCallback, Policy>::
-operator()(boost::system::error_code error_code,
-           std::size_t bytes_transferred) {
+void async_read_op<NextLayer, DynamicBuffer, ReadCallback, Policy>::operator()(
+    boost::system::error_code error_code, std::size_t bytes_transferred) {
     using op_impl = async_read_op_impl<DynamicBuffer, Policy>;
     callback_(
         error_code,
